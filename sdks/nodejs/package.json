@@ -1,0 +1,15 @@
+{
+  "name": "memox-sdk",
+  "version": "0.1.0",
+  "description": "Node.js client SDK for memox, the universal polyglot memory bridge",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^20.12.12",
+    "typescript": "^5.4.5"
+  }
+}
