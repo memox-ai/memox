@@ -19,10 +19,10 @@ RUN npm run build
 RUN cd dashboard && npm install && npm run build
 
 # Expose REST API port
-EXPOSE 3000
+EXPOSE 16369
 
 # Set environment to production
 ENV NODE_ENV=production
 
 # Run CLI command to start the server
-CMD ["node", "dist/cli/main.js", "start", "--port", "3000"]
+CMD ["node", "dist/cli/main.js", "start", "--port", "16369"]

@@ -19,7 +19,7 @@ export interface MemorySearchResult {
 export class MemoxClient {
   private baseUrl: string;
 
-  constructor(baseUrl = 'http://localhost:3000') {
+  constructor(baseUrl = 'http://localhost:16369') {
     this.baseUrl = baseUrl;
   }
 

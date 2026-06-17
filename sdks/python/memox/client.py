@@ -2,7 +2,7 @@ import httpx
 from typing import Any, Dict, List, Optional
 
 class MemoxClient:
-    def __init__(self, base_url: str = "http://localhost:3000"):
+    def __init__(self, base_url: str = "http://localhost:16369"):
         self.base_url = base_url
 
     def write(

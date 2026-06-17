@@ -35,7 +35,7 @@ services:
     build: .
     container_name: memox-api
     ports:
-      - "3000:3000"
+      - "16369:16369"
     depends_on:
       postgres:
         condition: service_healthy

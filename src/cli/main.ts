@@ -4,10 +4,11 @@ import { Command } from 'commander';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { spawn } from 'child_process';
 import { RESTServer } from '../api/server';
 import { MCPServer } from '../mcp/server';
 import { MemoryRouter } from '../core/router';
-import { runInstaller } from './installer';
+import { runInstaller, runUninstaller } from './installer';
 
 const program = new Command();
 
@@ -48,11 +49,11 @@ policies:
 
 databases:
   postgres:
-    connectionString: ""
+    connectionString: "postgresql://postgres:password@localhost:5432/memox"
     tableName: memox_memories
     vectorDimension: 1536
   redis:
-    url: ""
+    url: "redis://localhost:6379"
     indexName: memox_idx
     vectorDimension: 1536
 
@@ -82,10 +83,10 @@ external:
     const reset = '\x1b[0m';
     console.log(
       "\n" +
-      purple + "  _ __ ___   ___ _ __ ___   _____  __\n" +
-      purple + " | '_ ` _ \\ / _ \\ '_ ` _ \\ / _ \\ \\/ /\n" +
-      cyan   + " | | | | | |  __/ | | | | | (_) >  < \n" +
-      cyan   + " |_| |_| |_|\\___|_| |_| |_|\\___/_/\\_\\\n" + reset
+      purple + "    .---.      _ __ ___   ___ _ __ ___   _____  __\n" +
+      purple + "   /  _  \\    | '_ ` _ \\ / _ \\ '_ ` _ \\ / _ \\ \\/ /\n" +
+      cyan   + "  |  / \\  |   | | | | | |  __/ | | | | | (_) >  < \n" +
+      cyan   + "  |_/   \\_|   |_| |_| |_|\\___|_| |_| |_|\\___/_/\\_\\\n" + reset
     );
     console.log('memox initialized successfully! Use "memox start" to spin up the local REST API.');
   });
@@ -98,13 +99,76 @@ program
     await runInstaller();
   });
 
+// uninstall command
+program
+  .command('uninstall')
+  .description('Scan AI coding agent config directories and remove the memox MCP configuration')
+  .action(async () => {
+    await runUninstaller();
+  });
+
 // start command
 program
   .command('start')
   .description('Start the local REST API gateway')
-  .option('-p, --port <number>', 'Port to run the REST API gateway', '3000')
+  .option('-p, --port <number>', 'Port to run the REST API gateway', '16369')
+  .option('-d, --daemon', 'Run as a background daemon process')
   .action(async (options) => {
     const port = parseInt(options.port, 10);
+
+    if (options.daemon && process.env.MEMOX_DAEMON_CHILD !== 'true') {
+      const memoxDir = path.join(os.homedir(), '.memox');
+      const pidPath = path.join(memoxDir, 'daemon.pid');
+      const logPath = path.join(memoxDir, 'daemon.log');
+
+      if (!fs.existsSync(memoxDir)) {
+        fs.mkdirSync(memoxDir, { recursive: true });
+      }
+
+      if (fs.existsSync(pidPath)) {
+        const existingPid = parseInt(fs.readFileSync(pidPath, 'utf8').trim(), 10);
+        try {
+          process.kill(existingPid, 0);
+          console.error(`\x1b[31m[memox] Daemon is already running (PID: ${existingPid}).\x1b[0m`);
+          console.error(`  Please stop it first using 'memox stop' or use a different port.`);
+          process.exit(1);
+        } catch (e) {
+          try {
+            fs.unlinkSync(pidPath);
+          } catch (unlinkErr) {}
+        }
+      }
+
+      console.log(`[memox] Starting memox daemon in the background...`);
+
+      const scriptPath = process.argv[1];
+      const logStream = fs.openSync(logPath, 'a');
+
+      const child = spawn(
+        process.execPath,
+        [scriptPath, 'start', '--port', port.toString()],
+        {
+          detached: true,
+          stdio: ['ignore', logStream, logStream],
+          env: {
+            ...process.env,
+            MEMOX_DAEMON_CHILD: 'true'
+          }
+        }
+      );
+
+      child.unref();
+
+      if (child.pid) {
+        fs.writeFileSync(pidPath, child.pid.toString(), 'utf8');
+        console.log(`\x1b[32m[memox] Daemon successfully started!\x1b[0m`);
+        console.log(`  - Port: ${port}`);
+        console.log(`  - PID: ${child.pid}`);
+        console.log(`  - Log File: ${logPath}`);
+      }
+      process.exit(0);
+    }
+
     const server = new RESTServer(port);
     await server.start();
 
@@ -114,6 +178,80 @@ program
       await server.stop();
       process.exit(0);
     });
+  });
+
+// stop command
+program
+  .command('stop')
+  .description('Stop the background memox daemon process')
+  .action(async () => {
+    const memoxDir = path.join(os.homedir(), '.memox');
+    const pidPath = path.join(memoxDir, 'daemon.pid');
+
+    if (!fs.existsSync(pidPath)) {
+      console.log('[memox] No daemon PID file found. Is the daemon running?');
+      return;
+    }
+
+    const pid = parseInt(fs.readFileSync(pidPath, 'utf8').trim(), 10);
+    console.log(`[memox] Stopping daemon process with PID ${pid}...`);
+
+    try {
+      process.kill(pid, 'SIGINT');
+      
+      let exited = false;
+      for (let i = 0; i < 30; i++) {
+        try {
+          process.kill(pid, 0);
+          await new Promise(r => setTimeout(r, 100));
+        } catch (e) {
+          exited = true;
+          break;
+        }
+      }
+
+      if (exited) {
+        console.log(`\x1b[32m[memox] Stopped daemon process ${pid}.\x1b[0m`);
+      } else {
+        process.kill(pid, 'SIGKILL');
+        console.log(`\x1b[33m[memox] Force-killed daemon process ${pid}.\x1b[0m`);
+      }
+    } catch (err: any) {
+      console.log(`[memox] Daemon process ${pid} was not running: ${err.message}`);
+    }
+
+    try {
+      fs.unlinkSync(pidPath);
+    } catch (e) {}
+  });
+
+// status command
+program
+  .command('status')
+  .description('Check the status of the background memox daemon')
+  .action(() => {
+    const memoxDir = path.join(os.homedir(), '.memox');
+    const pidPath = path.join(memoxDir, 'daemon.pid');
+
+    if (!fs.existsSync(pidPath)) {
+      console.log('[memox] Status: \x1b[31mstopped\x1b[0m (no PID file found)');
+      return;
+    }
+
+    const pid = parseInt(fs.readFileSync(pidPath, 'utf8').trim(), 10);
+    try {
+      process.kill(pid, 0);
+      console.log(`[memox] Status: \x1b[32mrunning\x1b[0m (PID: ${pid})`);
+      const logPath = path.join(memoxDir, 'daemon.log');
+      if (fs.existsSync(logPath)) {
+        console.log(`  Log File: ${logPath}`);
+      }
+    } catch (e) {
+      console.log(`[memox] Status: \x1b[31mstopped\x1b[0m (PID ${pid} file exists but process is dead)`);
+      try {
+        fs.unlinkSync(pidPath);
+      } catch (err) {}
+    }
   });
 
 // mcp command
@@ -171,5 +309,32 @@ program
       router.close();
     }
   });
+
+if (process.argv.length <= 2) {
+  const purple = '\x1b[35m';
+  const cyan = '\x1b[36m';
+  const reset = '\x1b[0m';
+  const bold = '\x1b[1m';
+  
+  console.log(
+    "\n" +
+    purple + "    .---.      _ __ ___   ___ _ __ ___   _____  __\n" +
+    purple + "   /  _  \\    | '_ ` _ \\ / _ \\ '_ ` _ \\ / _ \\ \\/ /\n" +
+    cyan   + "  |  / \\  |   | | | | | |  __/ | | | | | (_) >  < \n" +
+    cyan   + "  |_/   \\_|   |_| |_| |_|\\___|_| |_| |_|\\___/_/\\_\\\n" + reset
+  );
+  console.log(bold + 'Welcome to memox! ' + reset + 'The universal memory bridge for AI agents.\n');
+  console.log('Quick Start:');
+  console.log(`  ${cyan}memox init --local${reset}   Initialize configurations in current directory`);
+  console.log(`  ${cyan}memox install${reset}        Auto-register MCP with AI coding agents`);
+  console.log(`  ${cyan}memox uninstall${reset}      Remove MCP registration from AI coding agents`);
+  console.log(`  ${cyan}memox start -d${reset}       Start the REST API as a background daemon`);
+  console.log(`  ${cyan}memox status${reset}         Check daemon running status`);
+  console.log(`  ${cyan}memox stop${reset}           Stop the background daemon process`);
+  console.log(`  ${cyan}memox --help${reset}         View complete command line reference\n`);
+  
+  program.outputHelp();
+  process.exit(0);
+}
 
 program.parse(process.argv);

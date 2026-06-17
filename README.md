@@ -1,8 +1,4 @@
-<p align="center">
-  <img src="./dashboard/public/logo.svg" alt="Memox Logo" width="160" />
-</p>
-
-# memox
+# <img src="./dashboard/public/logo.svg" alt="Memox Logo" width="38" style="vertical-align: middle;" /> memox
 
 > Enterprise-grade, universal, polyglot memory bridge for AI agents.
 
@@ -161,8 +157,8 @@ Add the following to your Claude Desktop config (e.g. `~/Library/Application Sup
 {
   "mcpServers": {
     "memox": {
-      "command": "node",
-      "args": ["/absolute/path/to/memox/dist/cli/main.js", "mcp"]
+      "command": "memox",
+      "args": ["mcp"]
     }
   }
 }

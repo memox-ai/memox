@@ -8,7 +8,7 @@ export class RESTServer {
   private port: number;
   private serverInstance: any = null;
 
-  constructor(port = 3000) {
+  constructor(port = 16369) {
     this.port = port;
     this.app = express();
     this.router = new MemoryRouter();
@@ -214,7 +214,7 @@ export class RESTServer {
   }
 
   public start(): Promise<void> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       this.serverInstance = this.app.listen(this.port, () => {
         const purple = '\x1b[35m';
         const cyan = '\x1b[36m';
@@ -222,13 +222,24 @@ export class RESTServer {
         const bold = '\x1b[1m';
         
         console.log(
-          purple + "  _ __ ___   ___ _ __ ___   _____  __\n" +
-          purple + " | '_ ` _ \\ / _ \\ '_ ` _ \\ / _ \\ \\/ /\n" +
-          cyan   + " | | | | | |  __/ | | | | | (_) >  < \n" +
-          cyan   + " |_| |_| |_|\\___|_| |_| |_|\\___/_/\\_\\\n" + reset
+          purple + "    .---.      _ __ ___   ___ _ __ ___   _____  __\n" +
+          purple + "   /  _  \\    | '_ ` _ \\ / _ \\ '_ ` _ \\ / _ \\ \\/ /\n" +
+          cyan   + "  |  / \\  |   | | | | | |  __/ | | | | | (_) >  < \n" +
+          cyan   + "  |_/   \\_|   |_| |_| |_|\\___|_| |_| |_|\\___/_/\\_\\\n" + reset
         );
         console.log(`${bold}[memox]${reset} REST API server listening at ${cyan}http://localhost:${this.port}${reset}\n`);
         resolve();
+      });
+
+      this.serverInstance.on('error', (err: any) => {
+        if (err.code === 'EADDRINUSE') {
+          console.error(`\n\x1b[31m[memox] Error: Port ${this.port} is already in use.\x1b[0m`);
+          console.error(`  Please make sure another instance of memox is not already running.`);
+          console.error(`  You can also start on a different port: memox start --port <port_number>\n`);
+          process.exit(1);
+        } else {
+          reject(err);
+        }
       });
     });
   }
