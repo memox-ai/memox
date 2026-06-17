@@ -7,6 +7,7 @@ import * as os from 'os';
 import { RESTServer } from '../api/server';
 import { MCPServer } from '../mcp/server';
 import { MemoryRouter } from '../core/router';
+import { runInstaller } from './installer';
 
 const program = new Command();
 
@@ -87,6 +88,14 @@ external:
       cyan   + " |_| |_| |_|\\___|_| |_| |_|\\___/_/\\_\\\n" + reset
     );
     console.log('memox initialized successfully! Use "memox start" to spin up the local REST API.');
+  });
+
+// install command
+program
+  .command('install')
+  .description('Scan AI coding agent config directories and write the memox MCP configuration')
+  .action(async () => {
+    await runInstaller();
   });
 
 // start command
